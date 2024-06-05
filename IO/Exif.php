@@ -1,7 +1,7 @@
 <?php
 
 /*
- * IO_Exif class - v1.0
+ * IO_Exif class - v1.1
  * 2016/5/22- (c) yoya@awm.jp
  */
 
