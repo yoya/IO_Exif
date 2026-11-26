@@ -21,7 +21,7 @@ class IO_Exif_Tag {
             } else {
                 $bit = new IO_Exif_Bit();
                 $bit->input($tagData);
-                $bit->getByteOrder($byteOrder);
+                $bit->setByteOrder($byteOrder);
                 $data = array();
                 for ($i = 0 ; $i < $tagCount ; $i++) {
                     switch ($tagType) {

@@ -1,0 +1,68 @@
+<?php
+/*
+ * regression tests (no dependency)
+ * usage: php tests/run.php
+ *   IO_Bit is loaded from vendor/ (composer install) or include_path.
+ */
+
+$root = dirname(dirname(__FILE__));
+if (is_readable($root.'/vendor/autoload.php')) {
+    require_once $root.'/vendor/autoload.php';
+}
+set_include_path($root.PATH_SEPARATOR.get_include_path());
+require_once 'IO/Exif.php';
+
+$failed = 0;
+$passed = 0;
+
+function check($name, $expect, $actual) {
+    global $failed, $passed;
+    if ($expect === $actual) {
+        $passed++;
+        return;
+    }
+    $failed++;
+    echo "FAIL: $name".PHP_EOL;
+    echo "  expect: ".var_export($expect, true).PHP_EOL;
+    echo "  actual: ".var_export($actual, true).PHP_EOL;
+}
+
+// "Exif\0\0" + TIFF header + one IFD0
+// $entries: [[tag, type, count, raw value bytes (in the byte order)], ...]
+function exif($bigEndian, $entries) {
+    $s = function ($v) use ($bigEndian) { return pack($bigEndian ? 'n' : 'v', $v); };
+    $l = function ($v) use ($bigEndian) { return pack($bigEndian ? 'N' : 'V', $v); };
+    $tiff = ($bigEndian ? "MM" : "II").$s(0x2a).$l(8);
+    $extOffset = 8 + 2 + 12 * count($entries) + 4;
+    $ext = '';
+    $ifd = $s(count($entries));
+    foreach ($entries as $entry) {
+        list($tag, $type, $count, $value) = $entry;
+        $ifd .= $s($tag).$s($type).$l($count);
+        if (strlen($value) <= 4) {
+            $ifd .= str_pad($value, 4, "\0");
+        } else {
+            $ifd .= $l($extOffset + strlen($ext));
+            $ext .= $value;
+        }
+    }
+    $ifd .= $l(0);
+    return "Exif\0\0".$tiff.$ifd.$ext;
+}
+
+function parseExif($data) {
+    $exif = new IO_Exif();
+    $exif->parse($data);
+    return $exif;
+}
+
+// E1: tag values must be decoded in the Exif byte order
+$exif = parseExif(exif(true, [[0xA002, 4, 1, pack('N', 640)],
+                              [0x011A, 5, 1, pack('NN', 72, 1)]]));
+check('MM LONG', [640], $exif->IFDs['0th']->tagTable[0xA002]->data);
+check('MM RATIONAL', [[72, 1]], $exif->IFDs['0th']->tagTable[0x011A]->data);
+$exif = parseExif(exif(false, [[0xA002, 4, 1, pack('V', 640)]]));
+check('II LONG', [640], $exif->IFDs['0th']->tagTable[0xA002]->data);
+
+echo "passed: $passed, failed: $failed".PHP_EOL;
+exit($failed ? 1 : 0);
