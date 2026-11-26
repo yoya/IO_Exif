@@ -1,34 +1,105 @@
-# Usage
+IO_Exif
+=======
+
+English version: [README.en.md](README.en.md)
+
+Exif (JPEG の APP1 に入る `Exif\0\0` + TIFF 構造) を解釈・ダンプする為のライブラリです。
+IFD0 (0th)、IFD1 (1th) と、そこから指される Exif・GPS・Interoperability の IFD を読み、タグごとの型・個数・値を取り出します。
+IO_Bit が必要です。利用に制限はかけません。コピーも改変もご自由にどうぞ。MIT ライセンスにしました。
+自分の環境だと動かないとか、機能が欲しいとかいった要望があれば連絡下さい。
+
+# License
+
+MIT License
+
+# Install
 
 ```
-$ php sample/exifdump.php
+% composer require yoya/io_exif
+```
+
+ライブラリ内の `require_once` は include_path で解決するので、IO_Exif と IO_Bit のディレクトリを include_path に入れて使います (下の例を参照)。
+
+# Usage
+
+- exifdump.php (IFD とタグのダンプ。`-n` でタグ名を付ける)
+
+```
+% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php
 Usage: php exifdump.php -f <exif_file> [-n] [-h] [-v]
-ex) php exifdump.php -f test.exif -hnv
-$ php sample/exifdump.php -f IMG_0905.exif
+ex) php exifdump.php -f test.exif -hnv 
+% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php -n -f vendor/yoya/io_exif/test/IMG_0905.exif
 IFD:0th
-    BaseOffset:14
-    OffsetTable:(count=9)
-        271:122
-        272:128
-        274:65536
-        282:142
-        283:150
-        296:131072
-        305:158
-        306:172
-        34665:192
+    BaseOffset:14 BaseSize:110
+    ExtendOffset:128 ExtendSize:70
+    TagTable:(count=9)
+        0x010F(Make): Type:ASCII Count:6 Offset:122 Data:Apple 
+        0x0110(Model): Type:ASCII Count:14 Offset:128 Data:iPhone 6 Plus 
+        0x0112(Orientation): Type:SHORT Count:1 Data: [0]1
+        0x011A(XResolution): Type:RATIONAL Count:1 Offset:142 Data: [0]72/1=72
+        0x011B(YResolution): Type:RATIONAL Count:1 Offset:150 Data: [0]72/1=72
+        0x0128(ResolutionUnit): Type:SHORT Count:1 Data: [0]2
+        0x0131(Software): Type:ASCII Count:13 Offset:158 Data:Photos 1.0.1 
+        0x0132(DateTime): Type:ASCII Count:20 Offset:172 Data:2015:10:03 10:13:51 
+        0x8769(Exif IFD Pointer): Type:LONG Count:1 Offset:192
 IFD:Exif
-    BaseOffset:198
-    OffsetTable:(count=9)
-        36864:808596017
-        36867:306
-        36868:326
-        37121:16909056
-        40960:808529968
-        40961:65536
-        40962:640
-        40963:480
-        41990:0
+    BaseOffset:198 BaseSize:110
+    ExtendOffset:312 ExtendSize:40
+    TagTable:(count=9)
+        0x9000(ExifVersion): Type:UNDEFINED Count:4 Data:0221
+        0x9003(DateTimeOriginal): Type:ASCII Count:20 Offset:306 Data:2015:10:03 10:13:51 
+        0x9004(DateTimeDigitized): Type:ASCII Count:20 Offset:326 Data:2015:10:03 10:13:51 
+        0x9101(ComponentsConfiguration): Type:UNDEFINED Count:4 Data: 
+        0xA000(FlashpixVersion): Type:UNDEFINED Count:4 Data:0100
+        0xA001(ColorSpace): Type:SHORT Count:1 Data: [0]1
+        0xA002(PixelXDimension): Type:LONG Count:1 Data: [0]640
+        0xA003(PixelYDimension): Type:LONG Count:1 Data: [0]480
+        0xA406(SceneCaptureType): Type:SHORT Count:1 Data: [0]0
+```
+
+- PHP から使う
+
+```php
+set_include_path('vendor/yoya/io_exif'.PATH_SEPARATOR.'vendor/yoya/io_bit'.PATH_SEPARATOR.get_include_path());
+require_once 'IO/Exif.php';
+
+$exif = new IO_Exif();
+$exif->parse(file_get_contents('vendor/yoya/io_exif/test/IMG_0905.exif'));  // "Exif\0\0" から始まるデータ
+
+$tag = $exif->IFDs['0th']->tagTable[0x0110];  // Model
+echo $tag->data, PHP_EOL;                     // "iPhone 6 Plus\0"
+$tag = $exif->IFDs['Exif']->tagTable[0xA002]; // PixelXDimension
+echo $tag->data[0], PHP_EOL;                  // 640
+```
+
+# 設計概要
+
+| クラス | 役割 |
+|---|---|
+| `IO_Exif` | Exif 全体。`parse()` でヘッダ (`Exif\0\0`、バイトオーダー `MM`/`II`、TIFF バージョン 0x2A) を確かめ、IFD を読んで `IFDs` (IFD 名 → `IO_Exif_IFD`) を作る。`dump()` / `build()` |
+| `IO_Exif_IFD` | IFD 1 個。`tagTable` (タグ ID → `IO_Exif_Tag`) と、IFD 本体の位置・大きさ (`baseOffset`, `baseSize`)、IFD の外に置かれた値の範囲 (`extendOffset`, `extendSize`) を持つ |
+| `IO_Exif_Tag` | タグ 1 個。型 (`type`)、個数 (`count`)、値の位置 (`offset`)、値 (`data`) を持つ。タグ名の表 (`getTagName()`) もここ |
+| `IO_Exif_Bit` | `IO_Bit` の拡張。バイトオーダーに従って BYTE / SHORT / LONG / RATIONAL などを読み書きする |
+
+- `data` は、ASCII と UNDEFINED ならバイト列のまま、それ以外は値の配列 (RATIONAL は `[分子, 分母]`)。
+- Exif・GPS・Interoperability の IFD へのポインタ (0x8769, 0x8825, 0xA005) を見つけると、その IFD も読む。`IFDs` は位置の順に並ぶ。
+  IFD のポインタが自分の親を指してループしていると例外を投げる。
+- 位置の基準: `BaseOffset` / `ExtendOffset` はデータの先頭 (`Exif\0\0` を含む) から、タグの `Offset` は TIFF ヘッダ (`MM`/`II`) からの位置。
+- `build()` は、IFD を変更していなければ、元のバイト列を IFD ごとに書き写す。
+
+# 既知の制限
+
+- JPEG ファイルはそのまま渡せない。APP1 の中身 (`Exif\0\0` から) を切り出して渡す。
+- 型は BYTE, ASCII, SHORT, LONG, RATIONAL, UNDEFINED, SLONG, SRATIONAL のみ。SBYTE, SSHORT, FLOAT, DOUBLE などがあると例外になり、全体を読めない。
+- `build()` は作りかけ。元と同じに書き出せるのは単純な配置のときだけ (`test/IMG_0905.exif`, `test/IMG_1474.exif`)。
+  IFD の外の値が後ろの IFD より後ろにあると例外になり (`test/CA3G0035.EXIF`)、IFD の外に値を持たない IFD があると出力が切れる。タグを変更しての書き出しは未実装。
+- `exifdump.php` の `-h` と `-v` は受け付けるが、出力は変わらない。
+- Composer の autoload だけでは読み込めない (ライブラリ内の `require_once` が include_path を使う)。
+
+# Test
+
+```
+% php tests/run.php
 ```
 
 # Reference
