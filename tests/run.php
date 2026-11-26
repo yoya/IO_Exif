@@ -111,6 +111,37 @@ parseExif(exif(true, [[0x0112, 3, 1, pack('n', 1)]]));
 restore_error_handler();
 check('parse without deprecation', [], $deprecated);
 
+// TIFF 6.0 field types 6-12, in both byte orders (13 IFD is not an Exif type)
+foreach ([true, false] as $bigEndian) {
+    $bo = $bigEndian ? 'MM' : 'II';
+    $s = $bigEndian ? 'n' : 'v';
+    $l = $bigEndian ? 'N' : 'V';
+    $f = $bigEndian ? 'G' : 'g';
+    $d = $bigEndian ? 'E' : 'e';
+    $exif = parseExif(exif($bigEndian, [[0xC000, 6, 2, "\x80\x7f"],
+                                        [0xC001, 7, 5, "a\0b\xffc"],
+                                        [0xC002, 8, 2, pack($s.$s, 0xfffe, 0x7fff)],
+                                        [0xC003, 9, 1, pack($l, 0xfffffffd)],
+                                        [0xC004, 10, 1, pack($l.$l, 0xffffffff, 3)],
+                                        [0xC005, 11, 2, pack($f.$f, 0.5, -4)],
+                                        [0xC006, 12, 1, pack($d, 1.0e100)]]));
+    $tags = $exif->IFDs['0th']->tagTable;
+    check("$bo SBYTE", [-128, 127], $tags[0xC000]->data);
+    check("$bo UNDEFINED", "a\0b\xffc", $tags[0xC001]->data);
+    check("$bo SSHORT", [-2, 32767], $tags[0xC002]->data);
+    check("$bo SLONG", [-3], $tags[0xC003]->data);
+    check("$bo SRATIONAL", [[-1, 3]], $tags[0xC004]->data);
+    check("$bo FLOAT x2", [0.5, -4.0], $tags[0xC005]->data);
+    check("$bo DOUBLE", [1.0e100], $tags[0xC006]->data);
+    ob_start();
+    $exif->dump();
+    $out = ob_get_clean();
+    check("$bo dump types", [1, 1, 1],
+          [substr_count($out, "0xC000: Type:SBYTE Count:2 Data: [0]-128 [1]127\n"),
+           substr_count($out, "0xC002: Type:SSHORT Count:2 Data: [0]-2 [1]32767\n"),
+           substr_count($out, "0xC006: Type:DOUBLE Count:1 Offset:"),]);
+}
+
 // the library loads its own files without include_path (Composer install)
 $bitFile = stream_resolve_include_path('IO/Bit.php');
 $code = 'set_include_path("/nonexistent"); require_once '.var_export($bitFile, true).';'

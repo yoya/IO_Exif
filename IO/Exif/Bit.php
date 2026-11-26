@@ -10,6 +10,17 @@ if (! class_exists('IO_Bit')) { // vendor/autoload or include_path
 
 class IO_Exif_Bit extends IO_Bit {
     var $byteOrder = null;
+    var $ieeeByteOrder = null; // 1:Big Endian, 2:LittleEndian
+    function __construct() {
+        if (pack("f", 12) === "A@\0\0") {
+            $ieeeByteOrder = null; // 1:Big Endian, 2:LittleEndian
+            $this->ieeeByteOrder = 1; // 1:Big Endian
+        } else if (pack("f", 12) === "\0\0@A") {
+            $this->ieeeByteOrder = 2; // 2:LittleEndian
+        } else {
+            throw new Exception("Unknown Machine IEEE Byte Order\n");
+        }
+    }
     function setByteOrder($byteOrder) {
         $this->byteOrder = $byteOrder;
     }
@@ -71,9 +82,18 @@ class IO_Exif_Bit extends IO_Bit {
         }
         return [$numer, $denom];
     }
+    // type:6
+    function getSBYTE() {
+        return $this->getSI8();
+    }
     // type:7
     function getUNDEFINED($len) {
         return $this->getData($len);
+    }
+    // type:8
+    function getSSHORT() {
+        $v = $this->getSHORT();
+        return ($v < 0x8000) ? $v : ($v - 0x10000);
     }
     // type:9
     function getSLONG() {
@@ -92,6 +112,24 @@ class IO_Exif_Bit extends IO_Bit {
             $denom = $this->getSI32LE();
         }
         return [$numer, $denom];
+    }
+    // type:11
+    function getFLOAT() {
+        $p = $this->getData(4);
+        if ($this->byteOrder != $this->ieeeByteOrder) {
+            $p = strrev($p);
+        }
+        $u = unpack("f", $p);
+        return $u[1];
+    }
+    // type:12
+    function getDOUBLE() {
+        $p = $this->getData(8);
+        if ($this->byteOrder != $this->ieeeByteOrder) {
+            $p = strrev($p);
+        }
+        $u = unpack("d", $p);
+        return $u[1];
     }
     /*
      * put function
@@ -130,9 +168,17 @@ class IO_Exif_Bit extends IO_Bit {
             $this->putUI32LE($v[1]);
         }
     }
+    // type:6
+    function putSBYTE($v) {
+        $this->putSI8($v);
+    }
     // type:7
     function putUNDEFINED($v, $len) {
         $this->putData($v, $len);
+    }
+    // type:8
+    function putSSHORT($v) {
+        $this->putSHORT(($v < 0) ? ($v + 0x10000) : $v);
     }
     // type:9
     function putSLONG($v) {
@@ -151,6 +197,22 @@ class IO_Exif_Bit extends IO_Bit {
             $this->putSI32LE($v[0]);
             $this->putSI32LE($v[1]);
         }
+    }
+    // type:11
+    function putFLOAT($v) {
+        $p = pack("f", $v);
+        if ($this->byteOrder != $this->ieeeByteOrder) {
+            $p = strrev($p);
+        }
+        $this->putData($p, 4);
+    }
+    // type:12
+    function putDOUBLE($v) {
+        $p = pack("d", $v);
+        if ($this->byteOrder != $this->ieeeByteOrder) {
+            $p = strrev($p);
+        }
+        $this->putData($p, 8);
     }
     /*
      * etc

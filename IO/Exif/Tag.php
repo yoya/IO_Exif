@@ -37,11 +37,23 @@ class IO_Exif_Tag {
                     case 5: // "RATIONAL"
                         $d = $bit->getRATIONAL();
                         break;
+                    case 6: // "SBYTE"
+                        $d = $bit->getSBYTE();
+                        break;
+                    case 8: // "SSHORT"
+                        $d = $bit->getSSHORT();
+                        break;
                     case 9: // "SLONG"
                         $d = $bit->getSLONG();
                         break;
                     case 10: // "SRATIONAL"
                         $d = $bit->getSRATIONAL();
+                        break;
+                    case 11: // "FLOAT"
+                        $d = $bit->getFLOAT();
+                        break;
+                    case 12: // "DOUBLE"
+                        $d = $bit->getDOUBLE();
                         break;
                     default:
                         throw new Exception("Unknown tag type:$tagType");
@@ -241,20 +253,22 @@ class IO_Exif_Tag {
     }
     static function getElementSizeTable() {
         static $elementSizeTable =
-            [ /*BYTE*/     1 => 1,
+            [ /*BYTE*/     1 => 1, /*SBYTE*/      6 => 1,
               /*ASCII*/    2 => 1, /*UNDEFINED*/  7 => 1,
-              /*SHORT*/    3 => 2,
+              /*SHORT*/    3 => 2, /*SSHORT*/     8 => 2,
               /*LONG*/     4 => 4, /*SLONG*/      9 => 4,
-              /*RATIONAL*/ 5 => 8, /*SRATIONAL*/ 10 => 8 ];
+              /*RATIONAL*/ 5 => 8, /*SRATIONAL*/ 10 => 8,
+              /*FLOAT*/   11 => 4, /*DOUBLE*/    12 => 8, ];
         return $elementSizeTable;
     }
     static function getTypeNameTable() {
         static $tagTypeNameTable =
-            [ 1 => "BYTE"    ,
+            [ 1 => "BYTE"    ,  6 => "SBYTE"    ,
               2 => "ASCII"   ,  7 => "UNDEFINED",
-              3 => "SHORT"   ,
+              3 => "SHORT"   ,  8 => "SSHORT"   ,
               4 => "LONG"    ,  9 => "SLONG"    ,
-              5 => "RATIONAL", 10 => "SRATIONAL"  ];
+              5 => "RATIONAL", 10 => "SRATIONAL",
+              11 => "FLOAT"  , 12 => "DOUBLE"   , ];
         return $tagTypeNameTable;
     }
     static function getTagName($id) {
