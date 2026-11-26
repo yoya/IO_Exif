@@ -5,9 +5,9 @@
  * 2016/5/22- (c) yoya@awm.jp
  */
 
-require_once 'IO/Exif/Bit.php';
-require_once 'IO/Exif/Tag.php';
-require_once 'IO/Exif/IFD.php';
+require_once dirname(__FILE__).'/Exif/Bit.php';
+require_once dirname(__FILE__).'/Exif/Tag.php';
+require_once dirname(__FILE__).'/Exif/IFD.php';
 
 class IO_Exif {
     var $exifData = null;

@@ -4,7 +4,9 @@
  * 2016/5/22- (c) yoya@awm.jp
  */
 
-require_once 'IO/Bit.php';
+if (! class_exists('IO_Bit')) { // vendor/autoload or include_path
+    require_once 'IO/Bit.php';
+}
 
 class IO_Exif_Bit extends IO_Bit {
     var $byteOrder = null;

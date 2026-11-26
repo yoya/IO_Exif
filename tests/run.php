@@ -111,5 +111,12 @@ parseExif(exif(true, [[0x0112, 3, 1, pack('n', 1)]]));
 restore_error_handler();
 check('parse without deprecation', [], $deprecated);
 
+// the library loads its own files without include_path (Composer install)
+$bitFile = stream_resolve_include_path('IO/Bit.php');
+$code = 'set_include_path("/nonexistent"); require_once '.var_export($bitFile, true).';'
+      . ' require_once '.var_export($root.'/IO/Exif.php', true).'; echo class_exists("IO_Exif") ? "ok" : "ng";';
+$out = shell_exec(escapeshellarg(PHP_BINARY).' -d display_errors=stderr -r '.escapeshellarg($code).' 2>&1');
+check('load without include_path', 'ok', $out);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);

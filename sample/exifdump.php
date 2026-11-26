@@ -1,6 +1,10 @@
 <?php
 
-require_once 'IO/Exif.php';
+if (is_readable('vendor/autoload.php')) {
+    require 'vendor/autoload.php';
+} else {
+    require_once 'IO/Exif.php';
+}
 
 $options = getopt("f:hnv");
 
