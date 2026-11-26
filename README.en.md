@@ -3,7 +3,7 @@ IO_Exif
 
 日本語版: [README.md](README.md)
 
-A library for parsing and dumping Exif (`Exif\0\0` followed by a TIFF structure, as stored in the APP1 segment of a JPEG).
+A library for parsing, dumping and writing Exif (`Exif\0\0` followed by a TIFF structure, as stored in the APP1 segment of a JPEG).
 It reads IFD0 (0th), IFD1 (1th) and the Exif, GPS and Interoperability IFDs they point to, and gives the type, count and value of each tag.
 It requires IO_Bit. Not limited in use, free to copy and modify under the MIT license.
 Please contact me if it does not work in your environment or if you want new features.
@@ -18,17 +18,17 @@ MIT License
 % composer require yoya/io_exif
 ```
 
-The `require_once` calls inside the library are resolved through include_path, so put the IO_Exif and IO_Bit directories on include_path (see the examples below).
+Load `vendor/autoload.php` and it is ready. Without Composer, put the IO_Exif and IO_Bit directories on include_path.
 
 # Usage
 
 - exifdump.php (dump of the IFDs and tags; `-n` adds tag names)
 
 ```
-% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php
+% php vendor/yoya/io_exif/sample/exifdump.php
 Usage: php exifdump.php -f <exif_file> [-n] [-h] [-v]
 ex) php exifdump.php -f test.exif -hnv 
-% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php -n -f vendor/yoya/io_exif/test/IMG_0905.exif
+% php vendor/yoya/io_exif/sample/exifdump.php -n -f vendor/yoya/io_exif/test/IMG_0905.exif
 IFD:0th
     BaseOffset:14 BaseSize:110
     ExtendOffset:128 ExtendSize:70
@@ -60,8 +60,7 @@ IFD:Exif
 - From PHP
 
 ```php
-set_include_path('vendor/yoya/io_exif'.PATH_SEPARATOR.'vendor/yoya/io_bit'.PATH_SEPARATOR.get_include_path());
-require_once 'IO/Exif.php';
+require 'vendor/autoload.php';
 
 $exif = new IO_Exif();
 $exif->parse(file_get_contents('vendor/yoya/io_exif/test/IMG_0905.exif'));  // data starting with "Exif\0\0"
@@ -70,6 +69,9 @@ $tag = $exif->IFDs['0th']->tagTable[0x0110];  // Model
 echo $tag->data, PHP_EOL;                     // "iPhone 6 Plus\0"
 $tag = $exif->IFDs['Exif']->tagTable[0xA002]; // PixelXDimension
 echo $tag->data[0], PHP_EOL;                  // 640
+
+$exif->IFDs['0th']->tagTable[0x0112]->data = [6];  // change Orientation
+file_put_contents('out.exif', $exif->build());     // data starting with "Exif\0\0"
 ```
 
 # Design
@@ -85,16 +87,17 @@ echo $tag->data[0], PHP_EOL;                  // 640
 - When it finds a pointer to the Exif, GPS or Interoperability IFD (0x8769, 0x8825, 0xA005), it reads that IFD too. `IFDs` is sorted by position.
   An IFD pointer that loops back to one of its parents throws an exception.
 - Offsets: `BaseOffset` / `ExtendOffset` count from the start of the data (including `Exif\0\0`), while a tag's `Offset` counts from the TIFF header (`MM`/`II`).
-- `build()` copies the original bytes IFD by IFD when no IFD was modified.
+- `build()` writes the IFDs in the order of `IFDs`, each followed by its out-of-line values, then copies the thumbnail (JPEGInterchangeFormat) and strips, and renumbers the offsets.
+  Tags are sorted by number and counts follow `data`, so a changed `data` is written. Values and IFDs are aligned to 2 bytes.
 
 # Known limitations
 
 - A JPEG file cannot be passed as is. Cut out the content of APP1 (from `Exif\0\0`) and pass that.
-- Only the types BYTE, ASCII, SHORT, LONG, RATIONAL, UNDEFINED, SLONG and SRATIONAL are supported. SBYTE, SSHORT, FLOAT, DOUBLE and so on throw an exception, and nothing can be read.
-- `build()` is unfinished. It reproduces the input only for simple layouts (`test/IMG_0905.exif`, `test/IMG_1474.exif`).
-  It throws when an IFD's out-of-line values come after a later IFD (`test/CA3G0035.EXIF`), and truncates the output when an IFD has no out-of-line values. Writing modified tags is not implemented.
+- The types are TIFF 6.0 types 1 to 12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE). Any other type throws an exception, and nothing can be read.
+- `build()` does not reproduce the input bytes; it lays the data out again (gaps disappear and offsets change).
+  - MakerNote moves as raw bytes, so a MakerNote format that holds offsets from the TIFF header inside it ends up with wrong offsets.
+  - These cannot be written and throw an exception: a pointer to an IFD that was not read (such as SubIFDs), an IFD after IFD1, FreeOffsets, the old JPEG tables (JPEGQTables and so on), ExtraCameraProfiles, and offsets outside the data.
 - `exifdump.php` accepts `-h` and `-v`, but they do not change the output.
-- Composer autoload alone cannot load it (the `require_once` calls in the library use include_path).
 
 # Test
 

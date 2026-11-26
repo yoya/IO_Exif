@@ -3,7 +3,7 @@ IO_Exif
 
 English version: [README.en.md](README.en.md)
 
-Exif (JPEG の APP1 に入る `Exif\0\0` + TIFF 構造) を解釈・ダンプする為のライブラリです。
+Exif (JPEG の APP1 に入る `Exif\0\0` + TIFF 構造) を解釈・ダンプ・書き出しする為のライブラリです。
 IFD0 (0th)、IFD1 (1th) と、そこから指される Exif・GPS・Interoperability の IFD を読み、タグごとの型・個数・値を取り出します。
 IO_Bit が必要です。利用に制限はかけません。コピーも改変もご自由にどうぞ。MIT ライセンスにしました。
 自分の環境だと動かないとか、機能が欲しいとかいった要望があれば連絡下さい。
@@ -18,17 +18,17 @@ MIT License
 % composer require yoya/io_exif
 ```
 
-ライブラリ内の `require_once` は include_path で解決するので、IO_Exif と IO_Bit のディレクトリを include_path に入れて使います (下の例を参照)。
+`vendor/autoload.php` を読み込めば使えます。Composer を使わない場合は、IO_Exif と IO_Bit のディレクトリを include_path に入れます。
 
 # Usage
 
 - exifdump.php (IFD とタグのダンプ。`-n` でタグ名を付ける)
 
 ```
-% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php
+% php vendor/yoya/io_exif/sample/exifdump.php
 Usage: php exifdump.php -f <exif_file> [-n] [-h] [-v]
 ex) php exifdump.php -f test.exif -hnv 
-% php -d include_path=vendor/yoya/io_exif:vendor/yoya/io_bit vendor/yoya/io_exif/sample/exifdump.php -n -f vendor/yoya/io_exif/test/IMG_0905.exif
+% php vendor/yoya/io_exif/sample/exifdump.php -n -f vendor/yoya/io_exif/test/IMG_0905.exif
 IFD:0th
     BaseOffset:14 BaseSize:110
     ExtendOffset:128 ExtendSize:70
@@ -60,8 +60,7 @@ IFD:Exif
 - PHP から使う
 
 ```php
-set_include_path('vendor/yoya/io_exif'.PATH_SEPARATOR.'vendor/yoya/io_bit'.PATH_SEPARATOR.get_include_path());
-require_once 'IO/Exif.php';
+require 'vendor/autoload.php';
 
 $exif = new IO_Exif();
 $exif->parse(file_get_contents('vendor/yoya/io_exif/test/IMG_0905.exif'));  // "Exif\0\0" から始まるデータ
@@ -70,6 +69,9 @@ $tag = $exif->IFDs['0th']->tagTable[0x0110];  // Model
 echo $tag->data, PHP_EOL;                     // "iPhone 6 Plus\0"
 $tag = $exif->IFDs['Exif']->tagTable[0xA002]; // PixelXDimension
 echo $tag->data[0], PHP_EOL;                  // 640
+
+$exif->IFDs['0th']->tagTable[0x0112]->data = [6];  // Orientation を変える
+file_put_contents('out.exif', $exif->build());     // "Exif\0\0" から始まるデータ
 ```
 
 # 設計概要
@@ -85,16 +87,17 @@ echo $tag->data[0], PHP_EOL;                  // 640
 - Exif・GPS・Interoperability の IFD へのポインタ (0x8769, 0x8825, 0xA005) を見つけると、その IFD も読む。`IFDs` は位置の順に並ぶ。
   IFD のポインタが自分の親を指してループしていると例外を投げる。
 - 位置の基準: `BaseOffset` / `ExtendOffset` はデータの先頭 (`Exif\0\0` を含む) から、タグの `Offset` は TIFF ヘッダ (`MM`/`II`) からの位置。
-- `build()` は、IFD を変更していなければ、元のバイト列を IFD ごとに書き写す。
+- `build()` は、`IFDs` の並び順に IFD とその外の値を詰めて書き、最後にサムネイル (JPEGInterchangeFormat) とストリップを写して、オフセットを付け直す。
+  タグは番号順に並べ、個数は `data` から決める。`data` を書き換えればその値が書き出される。値と IFD は 2 バイト境界に揃える。
 
 # 既知の制限
 
 - JPEG ファイルはそのまま渡せない。APP1 の中身 (`Exif\0\0` から) を切り出して渡す。
-- 型は BYTE, ASCII, SHORT, LONG, RATIONAL, UNDEFINED, SLONG, SRATIONAL のみ。SBYTE, SSHORT, FLOAT, DOUBLE などがあると例外になり、全体を読めない。
-- `build()` は作りかけ。元と同じに書き出せるのは単純な配置のときだけ (`test/IMG_0905.exif`, `test/IMG_1474.exif`)。
-  IFD の外の値が後ろの IFD より後ろにあると例外になり (`test/CA3G0035.EXIF`)、IFD の外に値を持たない IFD があると出力が切れる。タグを変更しての書き出しは未実装。
+- 型は TIFF 6.0 の 1〜12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE)。それ以外の型があると例外になり、全体を読めない。
+- `build()` は元のバイト列をそのまま再現するのではなく、配置を詰め直す (隙間は無くなり、オフセットは変わる)。
+  - MakerNote はバイト列のまま別の位置へ移るので、TIFF ヘッダからのオフセットを中に持つ形式の MakerNote は、中のオフセットが合わなくなる。
+  - 次のものは書き出せず例外になる: 読んでいない IFD を指すポインタ (SubIFDs など)、IFD1 の後に続く IFD、FreeOffsets、旧 JPEG の表 (JPEGQTables など)、ExtraCameraProfiles、データの外を指すオフセット。
 - `exifdump.php` の `-h` と `-v` は受け付けるが、出力は変わらない。
-- Composer の autoload だけでは読み込めない (ライブラリ内の `require_once` が include_path を使う)。
 
 # Test
 
