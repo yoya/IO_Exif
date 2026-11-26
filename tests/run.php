@@ -96,5 +96,10 @@ try {
 }
 check('IFD loop', 'IFD loop: Exif at offset 14', $err);
 
+// E6: addIFDRemoveList() must update the property
+$exif = new IO_Exif();
+$exif->addIFDRemoveList('GPSInfo');
+check('addIFDRemoveList', ['GPSInfo' => true], $exif->IFDRemoveList);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);

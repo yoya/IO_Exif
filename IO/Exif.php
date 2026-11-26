@@ -101,7 +101,7 @@ class IO_Exif {
     }
     function addIFDRemoveList(string $ifdName) {
         assert(is_string($ifdName));
-        $IFDRemoveList [$ifdName] = true;
+        $this->IFDRemoveList[$ifdName] = true;
     }
 }
 
