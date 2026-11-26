@@ -70,7 +70,10 @@ class IO_Exif_Tag {
                 foreach ($data as $i => $d) {
                     echo " [$i]";
                     if (is_array($d)) {
-                        echo $d[0]."/".$d[1]."=".($d[0]/$d[1]);
+                        echo $d[0]."/".$d[1];
+                        if ($d[1] != 0) {
+                            echo "=".($d[0]/$d[1]);
+                        }
                     } else {
                         echo $d;
                     }

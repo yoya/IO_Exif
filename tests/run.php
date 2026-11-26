@@ -72,5 +72,20 @@ check('MM SHORT x3', [8, 8, 8], $exif->IFDs['0th']->tagTable[0x0102]->data);
 $exif = parseExif(exif(false, [[0x0112, 3, 1, pack('v', 0x0102)]]));
 check('II SHORT', [0x0102], $exif->IFDs['0th']->tagTable[0x0112]->data);
 
+// E4: dump of a RATIONAL with denominator 0 must not throw
+$exif = parseExif(exif(true, [[0x9204, 10, 1, pack('NN', 0, 0)],
+                              [0x011A, 5, 1, pack('NN', 72, 1)]]));
+ob_start();
+try {
+    $exif->dump();
+    $err = null;
+} catch (Throwable $e) {
+    $err = get_class($e);
+}
+$out = ob_get_clean();
+check('dump RATIONAL 0/0 no error', null, $err);
+check('dump RATIONAL 0/0', 1, substr_count($out, " Data: [0]0/0\n"));
+check('dump RATIONAL 72/1', 1, substr_count($out, " Data: [0]72/1=72\n"));
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);
