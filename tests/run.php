@@ -101,5 +101,15 @@ $exif = new IO_Exif();
 $exif->addIFDRemoveList('GPSInfo');
 check('addIFDRemoveList', ['GPSInfo' => true], $exif->IFDRemoveList);
 
+// E7: parse() must not raise a deprecation ("self" in callables)
+$deprecated = [];
+set_error_handler(function ($errno, $errstr) use (&$deprecated) {
+    $deprecated []= $errstr;
+    return true;
+}, E_DEPRECATED);
+parseExif(exif(true, [[0x0112, 3, 1, pack('n', 1)]]));
+restore_error_handler();
+check('parse without deprecation', [], $deprecated);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);

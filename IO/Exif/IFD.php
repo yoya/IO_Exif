@@ -39,7 +39,7 @@ class IO_Exif_IFD {
         return ($ifd1->baseOffset > $ifd2->baseOffset)?1:-1;
     }
     static function sortIFDsByBaseOffset(&$IFDs) {
-        uasort($IFDs, "self::baseOffsetComp");
+        uasort($IFDs, ['IO_Exif_IFD', 'baseOffsetComp']);
     }
     function makeTagTable($bit, $baseOffset, $parentOffsets = []) {
         $this->baseOffset = $baseOffset;
