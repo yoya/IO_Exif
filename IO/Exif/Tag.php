@@ -65,6 +65,51 @@ class IO_Exif_Tag {
         }
         return $tag;
     }
+    // value bytes in the byte order (not padded)
+    function buildData($byteOrder) {
+        if (($this->type === 2 /*ASCII*/) || ($this->type === 7 /*UNDEFINED*/)) {
+            return $this->data;
+        }
+        $bit = new IO_Exif_Bit();
+        $bit->setByteOrder($byteOrder);
+        foreach ($this->data as $d) {
+            switch ($this->type) {
+            case 1: // "BYTE"
+                $bit->putBYTE($d);
+                break;
+            case 3: // "SHORT"
+                $bit->putSHORT($d);
+                break;
+            case 4: // "LONG"
+                $bit->putLONG($d);
+                break;
+            case 5: // "RATIONAL"
+                $bit->putRATIONAL($d);
+                break;
+            case 6: // "SBYTE"
+                $bit->putSBYTE($d);
+                break;
+            case 8: // "SSHORT"
+                $bit->putSSHORT($d);
+                break;
+            case 9: // "SLONG"
+                $bit->putSLONG($d);
+                break;
+            case 10: // "SRATIONAL"
+                $bit->putSRATIONAL($d);
+                break;
+            case 11: // "FLOAT"
+                $bit->putFLOAT($d);
+                break;
+            case 12: // "DOUBLE"
+                $bit->putDOUBLE($d);
+                break;
+            default:
+                throw new Exception("Unknown tag type:{$this->type}");
+            }
+        }
+        return $bit->output();
+    }
     function dump($opts) {
         $type = $this->type;
         $offset = $this->offset;
