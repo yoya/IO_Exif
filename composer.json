@@ -16,6 +16,6 @@
         "yoya/io_bit": "~3.0 || ^4.0"
     },
     "autoload": {
-        "psr-0": { "IO_ISOBMFF": "." }
+        "psr-0": { "IO_Exif": "." }
     }
 }
