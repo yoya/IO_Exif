@@ -16,10 +16,14 @@ class IO_Exif_IFD {
     var $extendSize = null;
     var $tagTable = null;
     var $modified = false;
-    static function Factory($bit, $baseOffset, $ifdName) {
+    static function Factory($bit, $baseOffset, $ifdName, $parentOffsets = []) {
+        if (isset($parentOffsets[$baseOffset])) {
+            throw new Exception("IFD loop: $ifdName at offset $baseOffset");
+        }
+        $parentOffsets[$baseOffset] = true;
         $ifd = new IO_Exif_IFD();
         $ifd->ifdName = $ifdName;
-        $additionalIFD = $ifd->makeTagTable($bit, $baseOffset);
+        $additionalIFD = $ifd->makeTagTable($bit, $baseOffset, $parentOffsets);
         return [$ifdName => $ifd] +  $additionalIFD;
     }
     static function getIFDNameTable() {
@@ -37,7 +41,7 @@ class IO_Exif_IFD {
     static function sortIFDsByBaseOffset(&$IFDs) {
         uasort($IFDs, "self::baseOffsetComp");
     }
-    function makeTagTable($bit, $baseOffset) {
+    function makeTagTable($bit, $baseOffset, $parentOffsets = []) {
         $this->baseOffset = $baseOffset;
         $bit->setByteOffset($baseOffset);
         $nTags = $bit->getSHORT();
@@ -85,7 +89,7 @@ class IO_Exif_IFD {
                 // echo "XXX: $tagName\n";
                 $tag = $tagTable[$tagNo];
                 if ($tag->offset > 0) {
-                    $ifdList += IO_Exif_IFD::Factory($bit, self::IFD_OFFSET_BASE + $tag->offset, $tagName);
+                    $ifdList += IO_Exif_IFD::Factory($bit, self::IFD_OFFSET_BASE + $tag->offset, $tagName, $parentOffsets);
                 }
             }
         }

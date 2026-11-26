@@ -87,5 +87,14 @@ check('dump RATIONAL 0/0 no error', null, $err);
 check('dump RATIONAL 0/0', 1, substr_count($out, " Data: [0]0/0\n"));
 check('dump RATIONAL 72/1', 1, substr_count($out, " Data: [0]72/1=72\n"));
 
+// E5: a sub-IFD pointer back to an ancestor IFD must not recurse forever
+$err = null;
+try {
+    parseExif(exif(false, [[0x8769, 4, 1, pack('V', 8)]])); // Exif IFD -> IFD0
+} catch (Exception $e) {
+    $err = $e->getMessage();
+}
+check('IFD loop', 'IFD loop: Exif at offset 14', $err);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);
