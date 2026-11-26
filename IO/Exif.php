@@ -95,7 +95,20 @@ class IO_Exif {
          */
         $tagTables = [];  // ifdName => [tagNo => tag (copy)]
         $refs = [];  // ifdName => [tagNo => ['ifd', [ifdName or null, ...]] or ['data', [bytes, ...]]]
-        foreach ($this->IFDs as $ifdName => $ifd) {
+        if (isset($this->IFDRemoveList["0th"])) {
+            throw new Exception("build: IFD:0th can not be removed");
+        }
+        // IFD chain (0th, 1th) without the removed ones
+        $chainNames = array_values(array_diff(array_intersect(["0th", "1th"], array_keys($this->IFDs)),
+                                              array_keys($this->IFDRemoveList)));
+        // the IFDs that are reachable from the chain and not removed
+        $queue = $chainNames;
+        while (count($queue) > 0) {
+            $ifdName = array_shift($queue);
+            if (isset($tagTables[$ifdName])) {
+                continue;
+            }
+            $ifd = $this->IFDs[$ifdName];
             $tagTable = [];
             $refs[$ifdName] = [];
             foreach ($ifd->tagTable as $tagNo => $tag) {
@@ -126,11 +139,19 @@ class IO_Exif {
                         if ($offset == 0) {
                             $names []= null;
                         } else if (isset($ifdNameByOffset[$offset])) {
-                            $names []= $ifdNameByOffset[$offset];
+                            if (! isset($this->IFDRemoveList[$ifdNameByOffset[$offset]])) {
+                                $names []= $ifdNameByOffset[$offset];
+                                $queue []= $ifdNameByOffset[$offset];
+                            }
                         } else {
                             throw new Exception("build: $tagHex in IFD:$ifdName points to an IFD at offset $offset that was not parsed");
                         }
                     }
+                    if (count($names) === 0) { // all pointed IFDs are removed
+                        unset($tagTable[$tagNo]);
+                        continue;
+                    }
+                    $tag->count = count($names);
                     $refs[$ifdName][$tagNo] = ['ifd', $names];
                 } else if (isset($dataTagTable[$tagNo])) {
                     $countTagNo = $dataTagTable[$tagNo];
@@ -160,6 +181,13 @@ class IO_Exif {
             }
             $tagTables[$ifdName] = $tagTable;
         }
+        $orderedTagTables = []; // in the parsed order
+        foreach ($this->IFDs as $ifdName => $ifd) {
+            if (isset($tagTables[$ifdName])) {
+                $orderedTagTables[$ifdName] = $tagTables[$ifdName];
+            }
+        }
+        $tagTables = $orderedTagTables;
         /*
          * layout (again when a SHORT offset tag needs LONG)
          */
@@ -250,7 +278,7 @@ class IO_Exif {
                     }
                 }
             }
-            $bit->putLONG((($ifdName === "0th") && isset($ifdOffsets["1th"])) ? $ifdOffsets["1th"] : 0);
+            $bit->putLONG((($ifdName === "0th") && isset($ifdOffsets["1th"])) ? $ifdOffsets["1th"] : 0); // IFD1 if kept
             foreach ($values as $tagNo => $data) {
                 $bit->alignNBytes(2);
                 if ($bit->getByteOffset() !== $valueOffsets[$ifdName][$tagNo]) {

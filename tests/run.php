@@ -316,6 +316,21 @@ $data .= pack('v', 0).pack('V', 0);
 $data = substr_replace($data, pack('V', strlen($data) - 6 - 6), strpos($data, pack('vvVV', 0x0100, 4, 1, 2)) + 12, 4);
 check("build IFD chain after 1th", "build: IFD:1th is followed by another IFD (not supported)", buildError(parseExif($data)));
 
+// build(): IFDRemoveList leaves out the IFDs, the IFDs only they point to, and the pointers
+$exif = parseExif(file_get_contents(dirname(__FILE__).'/../test/CA3G0035.EXIF'));
+$exif->addIFDRemoveList('Exif');
+$exif->addIFDRemoveList('NoSuchIFD');
+$exif2 = parseExif($exif->build());
+check("remove Exif", [['0th', '1th'], false],
+      [array_keys($exif2->IFDs), isset($exif2->IFDs['0th']->tagTable[0x8769])]);
+check("remove Exif, rest kept", [tagValues($exif)['0th'][0x010F], tagValues($exif)['1th'], imageData($exif)],
+      [tagValues($exif2)['0th'][0x010F], tagValues($exif2)['1th'], imageData($exif2)]);
+$exif->addIFDRemoveList('1th');
+$exif2 = parseExif($exif->build());
+check("remove 1th", ['0th'], array_keys($exif2->IFDs));
+$exif->addIFDRemoveList('0th');
+check("remove 0th", "build: IFD:0th can not be removed", buildError($exif));
+
 // the library loads its own files without include_path (Composer install)
 $bitFile = stream_resolve_include_path('IO/Bit.php');
 $code = 'set_include_path("/nonexistent"); require_once '.var_export($bitFile, true).';'
