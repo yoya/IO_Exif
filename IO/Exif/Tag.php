@@ -29,7 +29,7 @@ class IO_Exif_Tag {
                         $d = $bit->getBYTE();
                         break;
                     case 3: // "SHORT"
-                        $d = $bit->getBYTE();
+                        $d = $bit->getSHORT();
                         break;
                     case 4: // "LONG"
                         $d = $bit->getLONG();

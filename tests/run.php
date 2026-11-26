@@ -64,5 +64,13 @@ check('MM RATIONAL', [[72, 1]], $exif->IFDs['0th']->tagTable[0x011A]->data);
 $exif = parseExif(exif(false, [[0xA002, 4, 1, pack('V', 640)]]));
 check('II LONG', [640], $exif->IFDs['0th']->tagTable[0xA002]->data);
 
+// E2: SHORT values are 16-bit
+$exif = parseExif(exif(true, [[0x0112, 3, 1, pack('n', 0x0102)],
+                              [0x0102, 3, 3, pack('nnn', 8, 8, 8)]]));
+check('MM SHORT', [0x0102], $exif->IFDs['0th']->tagTable[0x0112]->data);
+check('MM SHORT x3', [8, 8, 8], $exif->IFDs['0th']->tagTable[0x0102]->data);
+$exif = parseExif(exif(false, [[0x0112, 3, 1, pack('v', 0x0102)]]));
+check('II SHORT', [0x0102], $exif->IFDs['0th']->tagTable[0x0112]->data);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);
