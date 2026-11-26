@@ -98,16 +98,6 @@ class IO_Exif_IFD {
         $this->tagTable = $tagTable;
         return $ifdList;
     }
-    function build($bit) {
-        $bit->alignNBytes(2);
-        $baseOffset = $bit->getByteOffset();
-        $nTags = count($this->tagTable);
-        $bit->putSHORT($nTags);
-        foreach ($this->tagTable as $offsetEntry) {
-            ;
-        }
-        throw new Exception("Not implemented yet!");
-    }
     function dump($opts) {
         $indent = $opts['indent'];
         $indentSpace = str_repeat(" ", $indent * 4);
@@ -128,19 +118,5 @@ class IO_Exif_IFD {
             }
             $tag->dump($opts);
         }
-    }
-    function renumberTagTableOffset($baseOffset) {
-        // [nTags] + count * ([tagNo] + [tagType] + [tagCount] + [tagOffset])
-        $baseSize = 2 + count($this->tagTable) * (2+2+4+4);
-        $extendOffset = $baseOffset + $baseSize;
-        $extendSize = 0;
-        foreach ($this->tagTable as $tag) {
-            ;
-        }        
-        //
-        $this->baseOffset = $baseOffset;
-        $this->baseSize = $baseSize;
-        $this->extendOffset = $extendOffset;
-        $this->baseSize = $baseSize;
     }
 }
