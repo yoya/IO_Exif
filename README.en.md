@@ -4,7 +4,7 @@ IO_Exif
 日本語版: [README.md](README.md)
 
 A library for parsing, dumping and writing Exif (`Exif\0\0` followed by a TIFF structure, as stored in the APP1 segment of a JPEG).
-It reads IFD0 (0th), IFD1 (1th) and the Exif, GPS and Interoperability IFDs they point to, and gives the type, count and value of each tag.
+It reads IFD0 (0th), IFD1 (1st) and the Exif, GPS and Interoperability IFDs they point to, and gives the type, count and value of each tag.
 It requires IO_Bit. Not limited in use, free to copy and modify under the MIT license.
 Please contact me if it does not work in your environment or if you want new features.
 

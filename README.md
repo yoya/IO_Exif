@@ -4,7 +4,7 @@ IO_Exif
 English version: [README.en.md](README.en.md)
 
 Exif (JPEG の APP1 に入る `Exif\0\0` + TIFF 構造) を解釈・ダンプ・書き出しする為のライブラリです。
-IFD0 (0th)、IFD1 (1th) と、そこから指される Exif・GPS・Interoperability の IFD を読み、タグごとの型・個数・値を取り出します。
+IFD0 (0th)、IFD1 (1st) と、そこから指される Exif・GPS・Interoperability の IFD を読み、タグごとの型・個数・値を取り出します。
 IO_Bit が必要です。利用に制限はかけません。コピーも改変もご自由にどうぞ。MIT ライセンスにしました。
 自分の環境だと動かないとか、機能が欲しいとかいった要望があれば連絡下さい。
 
@@ -110,3 +110,9 @@ file_put_contents('out.exif', $exif->build());     // "Exif\0\0" から始まる
 
 - http://dsas.blog.klab.org/archives/52123322.html
 - http://www.vieas.com/exif23.html
+
+## IO_Bit の利用箇所
+
+`IO_Exif_Bit` は `IO_Bit` を継承し、TIFF ヘッダに記録されたバイト順（`II` / `MM`）に応じて整数の読み書きを切り替えます。
+
+[IO_Bit Wiki](https://github.com/yoya/IO_Bit/wiki)
