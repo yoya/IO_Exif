@@ -89,6 +89,7 @@ file_put_contents('out.exif', $exif->build());     // "Exif\0\0" から始まる
 - 位置の基準: `BaseOffset` / `ExtendOffset` はデータの先頭 (`Exif\0\0` を含む) から、タグの `Offset` は TIFF ヘッダ (`MM`/`II`) からの位置。
 - `build()` は、`IFDs` の並び順に IFD とその外の値を詰めて書き、最後にサムネイル (JPEGInterchangeFormat) とストリップを写して、オフセットを付け直す。
   タグは番号順に並べ、個数は `data` から決める。`data` を書き換えればその値が書き出される。値と IFD は 2 バイト境界に揃える。
+  `addIFDRemoveList('GPSInfo')` などで指定した IFD は、それを指すタグ、それからしか指されない IFD と一緒に書き出さない (0th は消せない)。
 
 # 既知の制限
 

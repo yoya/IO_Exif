@@ -89,6 +89,7 @@ file_put_contents('out.exif', $exif->build());     // data starting with "Exif\0
 - Offsets: `BaseOffset` / `ExtendOffset` count from the start of the data (including `Exif\0\0`), while a tag's `Offset` counts from the TIFF header (`MM`/`II`).
 - `build()` writes the IFDs in the order of `IFDs`, each followed by its out-of-line values, then copies the thumbnail (JPEGInterchangeFormat) and strips, and renumbers the offsets.
   Tags are sorted by number and counts follow `data`, so a changed `data` is written. Values and IFDs are aligned to 2 bytes.
+  IFDs named with `addIFDRemoveList('GPSInfo')` and so on are left out, together with the tags pointing to them and the IFDs only they point to (0th cannot be removed).
 
 # Known limitations
 
