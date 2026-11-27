@@ -309,7 +309,7 @@ class IO_Exif {
             $offsetTable->dump($opts);
         }
     }
-    function addIFDRemoveList(string $ifdName) {
+    function addIFDRemoveList($ifdName) {
         assert(is_string($ifdName));
         $this->IFDRemoveList[$ifdName] = true;
     }
