@@ -338,5 +338,271 @@ $code = 'set_include_path("/nonexistent"); require_once '.var_export($bitFile, t
 $out = shell_exec(escapeshellarg(PHP_BINARY).' -d display_errors=stderr -r '.escapeshellarg($code).' 2>&1');
 check('load without include_path', 'ok', $out);
 
+/*
+ * synthetic test data (tests/data, made by tests/data/make.php)
+ */
+function checkThrows($name, $pattern, $func) {
+    try {
+        $func();
+        check($name, "exception matching $pattern", 'no exception');
+    } catch (Exception $e) {
+        check($name, 1, preg_match($pattern, $e->getMessage()));
+    }
+}
+
+// runs php with the same include_path; [exit status, stdout, stderr] (exit -1 on timeout)
+function runPHP($args, $timeout = 60) {
+    $cmd = array_merge([PHP_BINARY, '-d', 'include_path='.get_include_path(), '-d', 'error_reporting=E_ALL',
+                        '-d', 'display_errors=stderr', '-d', 'log_errors=0'], $args);
+    $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, dirname(dirname(__FILE__)));
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+    $out = $err = '';
+    $start = microtime(true);
+    while (true) {
+        $out .= stream_get_contents($pipes[1]);
+        $err .= stream_get_contents($pipes[2]);
+        $status = proc_get_status($proc);
+        if (! $status['running']) {
+            $out .= stream_get_contents($pipes[1]);
+            $err .= stream_get_contents($pipes[2]);
+            proc_close($proc);
+            return [$status['exitcode'], $out, $err];
+        }
+        if (microtime(true) - $start > $timeout) {
+            proc_terminate($proc, 9);
+            proc_close($proc);
+            return [-1, $out, $err."timeout"];
+        }
+        usleep(10000);
+    }
+}
+
+$dataDir = dirname(__FILE__).'/data';
+require_once $dataDir.'/make.php';
+
+// the files are up to date (make.php writes the same bytes)
+$madeFiles = makeFiles();
+foreach ($madeFiles as $name => $bytes) {
+    check("data $name is made by make.php", md5($bytes), md5_file("$dataDir/$name"));
+}
+$names = array_keys($madeFiles);
+sort($names);
+check("data files", $names, array_values(array_diff(array_map('basename', glob("$dataDir/*")), ['make.php'])));
+$madeFiles = array_keys($madeFiles);
+
+function dumpExif($exif, $opts) {
+    ob_start();
+    try {
+        $exif->dump($opts);
+        $err = null;
+    } catch (Throwable $e) {
+        $err = get_class($e).': '.$e->getMessage();
+    }
+    return [ob_get_clean(), $err];
+}
+
+// parse: every field type and IFD of all-mm.exif / all-ii.exif
+foreach (['MM' => 'all-mm.exif', 'II' => 'all-ii.exif'] as $bo => $file) {
+    $data = file_get_contents("$dataDir/$file");
+    $exif = parseExif($data);
+    $IFDs = $exif->IFDs;
+    check("$file byte order", ($bo === 'MM') ? 1 : 2, $exif->byteOrder);
+    check("$file IFDs", ['0th', 'Exif', 'Interoperability', 'GPSInfo', '1th'], array_keys($IFDs));
+    $t = $IFDs['0th']->tagTable;
+    $expect = [0x010E => [2, 15, "synthetic exif\0"], 0x010F => [2, 8, "IO_Exif\0"], 0x0110 => [2, 2, "t\0"],
+               0x0112 => [3, 1, [1]], 0x011A => [5, 1, [[72, 1]]], 0x011B => [5, 1, [[144, 2]]],
+               0x0128 => [3, 1, [2]], 0x0131 => [2, 9, "make.php\0"], 0x0132 => [2, 20, "2026:11:28 01:02:03\0"],
+               0x0213 => [3, 1, [1]], 0xC000 => [1, 2, [0, 255]], 0xC001 => [6, 5, [-128, 127, -1, 0, 1]],
+               0xC002 => [8, 2, [-32768, 32767]], 0xC003 => [9, 1, [-1]], 0xC004 => [10, 1, [[-5, 2]]],
+               0xC005 => [11, 1, [-0.5]], 0xC006 => [11, 3, [2.0, 0.125, -8.0]], 0xC007 => [12, 2, [1.0e-3, -1.0e10]],
+               0xC008 => [4, 2, [0, 0xFFFFFFFF]], 0xC009 => [3, 3, [1, 2, 3]], 0xC00A => [7, 0, ""]];
+    foreach ($expect as $tagNo => $e) {
+        check(sprintf("$file 0th 0x%04X", $tagNo), $e, [$t[$tagNo]->type, $t[$tagNo]->count, $t[$tagNo]->data]);
+    }
+    $tagNos = array_merge(array_keys($expect), [0x8769, 0x8825]);
+    sort($tagNos);
+    check("$file 0th tag order", $tagNos, array_keys($t));
+    // pointers and value offsets are from the TIFF header, baseOffset from the start ("Exif\0\0")
+    check("$file 0th pointers", [[null, $IFDs['Exif']->baseOffset - 6], [null, $IFDs['GPSInfo']->baseOffset - 6]],
+          [[$t[0x8769]->data, $t[0x8769]->offset], [$t[0x8825]->data, $t[0x8825]->offset]]);
+    check("$file 0th baseOffset", 6 + 8, $IFDs['0th']->baseOffset);
+    check("$file value offset", "IO_Exif\0", substr($data, 6 + $t[0x010F]->offset, 8));
+    $e = $IFDs['Exif']->tagTable;
+    check("$file Exif", [[[1, 250]], [[28, 10]], [400], "0232", "2026:11:28 01:02:03\0", "\1\2\3\0", [[-1, 3]],
+                         "MAKER\0\1", "ASCII\0\0\0comment", "0100", [1], [4, 1, [640]], [3, 1, [480]],
+                         $IFDs['Interoperability']->baseOffset - 6],
+          [$e[0x829A]->data, $e[0x829D]->data, $e[0x8827]->data, $e[0x9000]->data, $e[0x9003]->data,
+           $e[0x9101]->data, $e[0x9204]->data, $e[0x927C]->data, $e[0x9286]->data, $e[0xA000]->data,
+           $e[0xA001]->data, [$e[0xA002]->type, $e[0xA002]->count, $e[0xA002]->data],
+           [$e[0xA003]->type, $e[0xA003]->count, $e[0xA003]->data], $e[0xA005]->offset]);
+    check("$file Interoperability", ["R98\0", "0100"],
+          [$IFDs['Interoperability']->tagTable[0x0001]->data, $IFDs['Interoperability']->tagTable[0x0002]->data]);
+    $g = $IFDs['GPSInfo']->tagTable;
+    check("$file GPSInfo", [[2, 3, 0, 0], "N\0", [[35, 1], [40, 1], [1234, 100]], "E\0", [[139, 1], [45, 1], [0, 1]],
+                            [[12, 1], [34, 1], [56, 1]], "2026:11:28\0"],
+          [$g[0x0000]->data, $g[0x0001]->data, $g[0x0002]->data, $g[0x0003]->data, $g[0x0004]->data,
+           $g[0x0007]->data, $g[0x001D]->data]);
+    $t1 = $IFDs['1th']->tagTable;
+    check("$file 1th thumbnail", [[6], [[72, 1]], [9], $thumb],
+          [$t1[0x0103]->data, $t1[0x011A]->data, $t1[0x0202]->data, substr($data, 6 + $t1[0x0201]->data[0], 9)]);
+    check("$file build identical", md5($data), md5($exif->build()));
+}
+check("MM and II same values", tagValues(parseExif(file_get_contents("$dataDir/all-mm.exif"))),
+      tagValues(parseExif(file_get_contents("$dataDir/all-ii.exif"))));
+
+$data = file_get_contents("$dataDir/strips-mm.exif");
+$exif = parseExif($data);
+$t1 = $exif->IFDs['1th']->tagTable;
+check("strips-mm.exif", [['0th', '1th'], [3], [3, 2], [6, 3], "\x10\x20\x30\x40\x50\x60", "\x70\x80\x90"],
+      [array_keys($exif->IFDs), $exif->IFDs['0th']->tagTable[0x0112]->data, [$t1[0x0111]->type, $t1[0x0111]->count],
+       $t1[0x0117]->data, substr($data, 6 + $t1[0x0111]->data[0], 6), substr($data, 6 + $t1[0x0111]->data[1], 3)]);
+check("strips-mm.exif build identical", md5($data), md5($exif->build()));
+$data = file_get_contents("$dataDir/0th-only-ii.exif");
+$exif = parseExif($data);
+check("0th-only-ii.exif", [['0th'], [8], md5($data)],
+      [array_keys($exif->IFDs), $exif->IFDs['0th']->tagTable[0x0112]->data, md5($exif->build())]);
+
+// edit: change, add and remove
+$exif = parseExif(file_get_contents("$dataDir/all-mm.exif"));
+$exif->IFDs['0th']->tagTable[0x0112]->data = [6];
+$exif->IFDs['0th']->tagTable[0x013B] = IO_Exif_Tag::Factory(2, 0, null, "", 1);
+$exif->IFDs['0th']->tagTable[0x013B]->data = "Artist\0";
+$exif->IFDs['Exif']->tagTable[0xA002]->data = [1280];
+unset($exif->IFDs['Exif']->tagTable[0x927C]);
+$exif->addIFDRemoveList('GPSInfo');
+$exif->addIFDRemoveList('Interoperability');
+$exif2 = parseExif($exif->build());
+check("edit IFDs", ['0th', 'Exif', '1th'], array_keys($exif2->IFDs));
+check("edit values", [[6], [2, 7, "Artist\0"], [1280], false, false, false, $thumb],
+      [$exif2->IFDs['0th']->tagTable[0x0112]->data,
+       [$exif2->IFDs['0th']->tagTable[0x013B]->type, $exif2->IFDs['0th']->tagTable[0x013B]->count,
+        $exif2->IFDs['0th']->tagTable[0x013B]->data],
+       $exif2->IFDs['Exif']->tagTable[0xA002]->data, isset($exif2->IFDs['Exif']->tagTable[0x927C]),
+       isset($exif2->IFDs['0th']->tagTable[0x8825]), isset($exif2->IFDs['Exif']->tagTable[0xA005]),
+       substr($exif2->exifData, 6 + $exif2->IFDs['1th']->tagTable[0x0201]->data[0], 9)]);
+$exif->addIFDRemoveList('1th');
+$exif3 = parseExif($exif->build());
+check("edit remove 1th", [['0th', 'Exif'], 0],
+      [array_keys($exif3->IFDs), unpack('N', substr($exif3->exifData, $exif3->IFDs['0th']->baseOffset + $exif3->IFDs['0th']->baseSize, 4))[1]]);
+
+// dump(): no warnings / notices with every option
+$warnings = [];
+set_error_handler(function ($errno, $errstr, $errfile, $errline) use (&$warnings) {
+    $warnings []= "$errstr ($errfile:$errline)";
+    return true;
+});
+$dumps = [];
+foreach (array_diff($madeFiles, ['truncated.exif']) as $file) {
+    foreach ([[], ['name' => true], ['hexdump' => true, 'verbose' => true]] as $opts) {
+        list($out, $err) = dumpExif(parseExif(file_get_contents("$dataDir/$file")), $opts);
+        $dumps[$file][json_encode($opts)] = $out;
+        check("$file dump ".json_encode($opts), [null, 0], [$err, strpos($out, "IFD:0th\n")]);
+    }
+}
+restore_error_handler();
+check("dump no warnings", [], $warnings);
+$out = $dumps['all-mm.exif']['{"name":true}'];
+foreach (["0x0112(Orientation): Type:SHORT Count:1 Data: [0]1\n",
+          "0x0110(Model): Type:ASCII Count:2 Data:t\0\n",
+          "0xC001((Unknown)): Type:SBYTE Count:5 Offset:",
+          " Data: [0]-128 [1]127 [2]-1 [3]0 [4]1\n",
+          "0xC002((Unknown)): Type:SSHORT Count:2 Data: [0]-32768 [1]32767\n",
+          "0xC005((Unknown)): Type:FLOAT Count:1 Data: [0]-0.5\n",
+          "0xC00A((Unknown)): Type:UNDEFINED Count:0 Data:\n",
+          "0x8827(PhotographicSensitivity): Type:SHORT Count:1 Data: [0]400\n",
+          "0x9000(ExifVersion): Type:UNDEFINED Count:4 Data:0232\n",
+          " Data: [0]1/250=0.004\n",
+          "0x0000(GPSVersionID): Type:BYTE Count:4 Data: [0]2 [1]3 [2]0 [3]0\n",
+          "0x0202(JPEGInterchangeFormatLength): Type:LONG Count:1 Data: [0]9\n"] as $line) {
+    check("all-mm.exif dump has ".json_encode($line), 1, substr_count($out, $line));
+}
+check("all-mm.exif dump IFD names", ['0th', 'Exif', 'Interoperability', 'GPSInfo', '1th'],
+      preg_match_all('/^IFD:(.*)$/m', $out, $m) ? $m[1] : null);
+check("MM and II dump the same", $dumps['all-mm.exif']['[]'], $dumps['all-ii.exif']['[]']);
+
+// broken input
+checkThrows("truncated.exif", '/getData|getUI/', function () use ($dataDir) {
+    parseExif(file_get_contents("$dataDir/truncated.exif"));
+});
+$data = file_get_contents("$dataDir/all-ii.exif");
+checkThrows("no Exif header", '/^Unknown head 6 byte/', function () use ($data) { parseExif(substr($data, 6)); });
+checkThrows("empty input", '/./', function () { parseExif(""); });
+checkThrows("unknown byte order", '/^Unknown byte order: IM/', function () use ($data) { parseExif(substr_replace($data, "IM", 6, 2)); });
+checkThrows("unknown TIFF version", '/^Unknown TIFF version:0x2b/', function () use ($data) {
+    parseExif(substr_replace($data, pack('v', 0x2B), 8, 2));
+});
+checkThrows("0th offset beyond the end", '/./', function () use ($data) { parseExif(substr_replace($data, pack('V', 0x7fffffff), 10, 4)); });
+checkThrows("1th offset beyond the end", '/./', function () use ($data) {
+    parseExif(substr_replace($data, pack('V', strlen($data)), 6 + 8 + 2 + 12 * 23, 4));
+});
+checkThrows("unknown field type", '/unknown type 13/', function () use ($data) {
+    parseExif(substr_replace($data, pack('v', 13), 6 + 8 + 2 + 2, 2));
+});
+checkThrows("entry count beyond the end", '/./', function () use ($data) { parseExif(substr_replace($data, pack('v', 0xFFFF), 14, 2)); });
+checkThrows("Exif pointer beyond the end", '/./', function () use ($data) {
+    $pos = strpos($data, pack('vvV', 0x8769, 4, 1));
+    parseExif(substr_replace($data, pack('V', 0x10000), $pos + 8, 4));
+});
+// an IFD after 1th is not read, and build() can not write it
+$exif = parseExif($data);
+$next = $exif->IFDs['1th']->baseOffset + $exif->IFDs['1th']->baseSize;
+$exif = parseExif(substr_replace($data, pack('V', $exif->IFDs['0th']->baseOffset - 6), $next, 4));
+check("IFD after 1th", [['0th', 'Exif', 'Interoperability', 'GPSInfo', '1th'], "build: IFD:1th is followed by another IFD (not supported)"],
+      [array_keys($exif->IFDs), buildError($exif)]);
+
+// every truncation of the files: an exception or a result, no warnings, no hang
+$code = <<<'CODE'
+require_once 'IO/Exif.php';
+set_error_handler(function ($no, $str, $file, $line) { fwrite(STDERR, "WARNING: $str ($file:$line)\n"); return true; });
+$data = file_get_contents($argv[1]);
+$lastThrow = -1;
+for ($len = 0 ; $len < strlen($data) ; $len++) {
+    $exif = new IO_Exif();
+    try {
+        $exif->parse(substr($data, 0, $len));
+    } catch (Exception $e) {
+        $lastThrow = $len;
+        continue;
+    }
+    ob_start();
+    $exif->dump(['name' => true]);
+    ob_end_clean();
+    try {
+        $exif->build();
+    } catch (Exception $e) {
+    }
+}
+echo "lastThrow:$lastThrow\n";
+CODE;
+foreach (array_diff($madeFiles, ['truncated.exif']) as $file) {
+    list($status, $out, $err) = runPHP(['-r', $code, "$dataDir/$file"]);
+    check("$file truncations", [0, '', 0], [$status, $err, substr_count($out, "WARNING")]);
+    // every IFD and value is needed: any cut before the image data throws
+    $exif = parseExif(file_get_contents("$dataDir/$file"));
+    $end = 0;
+    foreach ($exif->IFDs as $ifd) {
+        $end = max($end, $ifd->baseOffset + $ifd->baseSize + 4, $ifd->extendOffset + $ifd->extendSize);
+    }
+    check("$file truncations before the end of IFDs throw", true,
+          preg_match('/lastThrow:(-?\d+)/', $out, $m) && ($end - 1 <= (int) $m[1]));
+}
+
+// sample/exifdump.php
+foreach (array_merge(array_diff($madeFiles, ['truncated.exif']),
+                     glob(dirname(__FILE__).'/../test/*.exif'), glob(dirname(__FILE__).'/../test/*.EXIF')) as $file) {
+    $path = (strpos($file, '/') === false) ? "$dataDir/$file" : $file;
+    foreach ([[], ['-n'], ['-n', '-h', '-v']] as $opts) {
+        list($status, $out, $err) = runPHP(array_merge(['sample/exifdump.php', '-f', $path], $opts));
+        check("exifdump ".basename($path)." ".implode(' ', $opts), [0, '', 0], [$status, $err, strpos($out, "IFD:0th\n")]);
+    }
+}
+list($status, $out, $err) = runPHP(['sample/exifdump.php', '-n', '-f', "$dataDir/all-ii.exif"]);
+check("exifdump output", $dumps['all-ii.exif']['{"name":true}'], $out);
+list($status, $out, $err) = runPHP(['sample/exifdump.php']);
+check("exifdump usage", [1, ''], [$status, $out]);
+list($status, $out, $err) = runPHP(['sample/exifdump.php', '-f', "$dataDir/truncated.exif"]);
+check("exifdump truncated fails", true, $status > 0);
+
 echo "passed: $passed, failed: $failed".PHP_EOL;
 exit($failed ? 1 : 0);
