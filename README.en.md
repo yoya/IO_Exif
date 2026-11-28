@@ -94,7 +94,7 @@ file_put_contents('out.exif', $exif->build());     // data starting with "Exif\0
 # Known limitations
 
 - A JPEG file cannot be passed as is. Cut out the content of APP1 (from `Exif\0\0`) and pass that.
-- The types are TIFF 6.0 types 1 to 12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE). Any other type throws an exception, and nothing can be read.
+- The types are TIFF 6.0 types 1 to 12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE). Any other type (such as the Exif 3.0 UTF-8 type 129) throws an exception, and nothing can be read.
 - `build()` does not reproduce the input bytes; it lays the data out again (gaps disappear and offsets change).
   - MakerNote moves as raw bytes, so a MakerNote format that holds offsets from the TIFF header inside it ends up with wrong offsets.
   - These cannot be written and throw an exception: a pointer to an IFD that was not read (such as SubIFDs), an IFD after IFD1, FreeOffsets, the old JPEG tables (JPEGQTables and so on), ExtraCameraProfiles, and offsets outside the data.

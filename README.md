@@ -94,7 +94,7 @@ file_put_contents('out.exif', $exif->build());     // "Exif\0\0" から始まる
 # 既知の制限
 
 - JPEG ファイルはそのまま渡せない。APP1 の中身 (`Exif\0\0` から) を切り出して渡す。
-- 型は TIFF 6.0 の 1〜12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE)。それ以外の型があると例外になり、全体を読めない。
+- 型は TIFF 6.0 の 1〜12 (BYTE, ASCII, SHORT, LONG, RATIONAL, SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE)。それ以外の型 (Exif 3.0 の UTF-8 型 129 など) があると例外になり、全体を読めない。
 - `build()` は元のバイト列をそのまま再現するのではなく、配置を詰め直す (隙間は無くなり、オフセットは変わる)。
   - MakerNote はバイト列のまま別の位置へ移るので、TIFF ヘッダからのオフセットを中に持つ形式の MakerNote は、中のオフセットが合わなくなる。
   - 次のものは書き出せず例外になる: 読んでいない IFD を指すポインタ (SubIFDs など)、IFD1 の後に続く IFD、FreeOffsets、旧 JPEG の表 (JPEGQTables など)、ExtraCameraProfiles、データの外を指すオフセット。
